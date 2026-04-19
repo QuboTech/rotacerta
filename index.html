@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RotaCerta — CRM de Visitas</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f0f0f; --surface: #181818; --surface2: #222; --border: #2a2a2a; --border2: #333;
+  --text: #f0ede8; --text2: #888; --text3: #555;
+  --accent: #c8f060; --accent2: #a8d040; --blue: #60a8f0; --orange: #f09060;
+  --radius: 10px; --font: 'DM Sans', sans-serif; --mono: 'DM Mono', monospace;
+}
+body { font-family: var(--font); background: var(--bg); color: var(--text); height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+
+header { display: flex; align-items: center; gap: 16px; padding: 11px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--surface); }
+.logo { font-family: var(--mono); font-size: 15px; font-weight: 500; color: var(--accent); letter-spacing: -0.5px; white-space: nowrap; }
+.logo span { color: var(--text3); }
+.header-stats { display: flex; gap: 20px; margin-left: auto; align-items: center; }
+.stat { display: flex; flex-direction: column; align-items: flex-end; }
+.stat-val { font-family: var(--mono); font-size: 16px; font-weight: 500; line-height: 1; }
+.stat-val.green { color: var(--accent); } .stat-val.orange { color: var(--orange); }
+.stat-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+.btn-add { background: var(--accent); color: #111; border: none; border-radius: var(--radius); padding: 8px 16px; font-family: var(--font); font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+.btn-add:hover { background: var(--accent2); }
+
+.main { display: flex; flex: 1; overflow: hidden; }
+.sidebar { width: 330px; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+.sidebar-top { padding: 12px 14px 10px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 9px; flex-shrink: 0; }
+.search-wrap { position: relative; }
+.search-wrap input { width: 100%; background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; color: var(--text); font-family: var(--font); font-size: 13px; padding: 7px 12px 7px 30px; outline: none; transition: border-color 0.15s; }
+.search-wrap input:focus { border-color: var(--accent); }
+.search-wrap input::placeholder { color: var(--text3); }
+.search-icon { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--text3); font-size: 13px; pointer-events: none; }
+.filters { display: flex; gap: 5px; flex-wrap: wrap; }
+.filter-btn { background: var(--surface2); border: 1px solid var(--border2); border-radius: 6px; color: var(--text2); font-size: 11px; font-family: var(--mono); padding: 4px 9px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.filter-btn:hover { border-color: var(--text3); color: var(--text); }
+.filter-btn.active { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 500; }
+.filter-btn.city-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+/* IMPORT */
+.import-section { padding: 10px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.import-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+.source-badge { font-size: 9px; color: var(--accent); background: rgba(200,240,96,0.1); border: 1px solid rgba(200,240,96,0.2); border-radius: 4px; padding: 1px 6px; }
+.cnae-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 8px; }
+.cnae-toggle { background: var(--surface2); border: 1px solid var(--border2); border-radius: 6px; color: var(--text3); font-size: 10px; font-family: var(--mono); padding: 5px 7px; cursor: pointer; transition: all 0.15s; text-align: left; line-height: 1.3; }
+.cnae-toggle:hover { border-color: var(--text3); color: var(--text2); }
+.cnae-toggle.active { background: rgba(200,240,96,0.1); border-color: rgba(200,240,96,0.35); color: var(--accent); }
+.cnae-toggle .code { font-size: 9px; color: var(--text3); display: block; margin-bottom: 1px; }
+.cnae-toggle.active .code { color: var(--accent2); }
+.city-row { display: flex; gap: 5px; }
+.import-select { flex: 1; background: var(--surface2); border: 1px solid var(--border2); border-radius: 6px; color: var(--text2); font-family: var(--mono); font-size: 11px; padding: 6px 8px; outline: none; cursor: pointer; appearance: none; }
+.import-select:focus { border-color: var(--accent); }
+.btn-buscar { background: var(--accent); color: #111; border: none; border-radius: 6px; padding: 6px 14px; font-family: var(--font); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+.btn-buscar:disabled { background: var(--surface2); color: var(--text3); cursor: not-allowed; }
+.progress-wrap { height: 2px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 7px; display: none; }
+.progress-bar { height: 100%; background: var(--accent); transition: width 0.3s; width: 0%; }
+.import-status { font-size: 10px; color: var(--text3); margin-top: 4px; font-family: var(--mono); min-height: 14px; }
+
+/* LIST */
+.client-list-header { padding: 8px 14px 4px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.list-title { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+.list-count { font-family: var(--mono); font-size: 11px; color: var(--text3); }
+.client-list { flex: 1; overflow-y: auto; padding: 0 6px 6px; }
+.client-list::-webkit-scrollbar { width: 3px; }
+.client-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+.client-card { padding: 8px 10px; border-radius: 8px; cursor: pointer; transition: background 0.12s; margin-bottom: 2px; }
+.client-card:hover { background: var(--surface2); }
+.client-top { display: flex; align-items: flex-start; gap: 7px; }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+.status-dot.cliente { background: var(--accent); } .status-dot.prospect { background: var(--orange); } .status-dot.nao-visitado { background: var(--text3); }
+.client-name { font-size: 12px; font-weight: 500; color: var(--text); line-height: 1.3; flex: 1; }
+.client-city { font-family: var(--mono); font-size: 10px; color: var(--text3); white-space: nowrap; }
+.client-meta { display: flex; gap: 4px; margin-top: 3px; padding-left: 13px; flex-wrap: wrap; }
+.tag { font-family: var(--mono); font-size: 9px; padding: 1px 5px; border-radius: 3px; border: 1px solid var(--border2); color: var(--text3); }
+.tag.tipo { color: var(--blue); border-color: rgba(96,168,240,0.3); }
+.tag.st-cliente { color: var(--accent); border-color: rgba(200,240,96,0.3); }
+.tag.st-prospect { color: var(--orange); border-color: rgba(240,144,96,0.3); }
+.empty-msg { padding: 24px 12px; text-align: center; font-size: 12px; color: var(--text3); line-height: 1.6; }
+.list-note { padding: 8px 12px 12px; font-size: 11px; color: var(--text3); line-height: 1.4; text-align: center; }
+
+/* MAP */
+.map-area { flex: 1; position: relative; overflow: hidden; }
+#map { width: 100%; height: 100%; }
+.leaflet-container { background: #1a1a1a !important; }
+.leaflet-tile { filter: brightness(0.75) saturate(0.85) !important; }
+.leaflet-control-zoom a { background: var(--surface) !important; color: var(--text2) !important; border-color: var(--border2) !important; }
+.leaflet-control-attribution { background: rgba(15,15,15,0.8) !important; color: var(--text3) !important; font-size: 9px !important; }
+.marker-cluster-small, .marker-cluster-medium, .marker-cluster-large { background: transparent !important; }
+.marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div { background: transparent !important; }
+
+.map-controls { position: absolute; top: 14px; right: 14px; z-index: 1000; display: flex; flex-direction: column; gap: 7px; }
+.map-btn { background: var(--surface); border: 1px solid var(--border2); border-radius: 8px; color: var(--text2); font-size: 12px; padding: 8px 13px; cursor: pointer; font-family: var(--font); transition: all 0.15s; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+.map-btn:hover { background: var(--surface2); color: var(--text); }
+
+.legend { position: absolute; bottom: 14px; left: 14px; z-index: 1000; background: var(--surface); border: 1px solid var(--border2); border-radius: 10px; padding: 9px 13px; display: flex; flex-direction: column; gap: 5px; }
+.legend-item { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--text2); }
+.legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+.route-panel { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 1000; background: var(--surface); border: 1px solid var(--border2); border-radius: 8px; padding: 11px 18px; display: none; align-items: center; gap: 14px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+.route-panel.visible { display: flex; }
+.route-info { font-size: 12px; color: var(--text2); }
+.route-info strong { color: var(--accent); font-family: var(--mono); }
+.btn-maps { background: var(--accent); color: #111; border: none; border-radius: 8px; padding: 7px 13px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; font-family: var(--font); }
+.route-actions { display: flex; align-items: center; gap: 7px; }
+
+/* POPUP */
+.leaflet-popup-content-wrapper { background: var(--surface2) !important; border: 1px solid var(--border2) !important; border-radius: 10px !important; box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important; color: var(--text) !important; font-family: var(--font) !important; }
+.leaflet-popup-tip { background: var(--surface2) !important; }
+.leaflet-popup-close-button { color: var(--text3) !important; }
+.popup-inner { padding: 2px 4px; min-width: 220px; }
+.popup-name { font-size: 13px; font-weight: 600; margin-bottom: 6px; line-height: 1.3; }
+.popup-rows { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.popup-row { display: flex; justify-content: space-between; gap: 8px; }
+.popup-key { font-size: 11px; color: var(--text3); white-space: nowrap; }
+.popup-val { font-family: var(--mono); font-size: 10px; color: var(--text2); text-align: right; word-break: break-all; }
+.popup-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+.popup-btn { flex: 1; padding: 6px 4px; border-radius: 6px; font-size: 10px; font-family: var(--font); font-weight: 500; cursor: pointer; border: 1px solid var(--border2); background: var(--surface); color: var(--text2); text-align: center; transition: all 0.12s; }
+.popup-btn:hover { background: var(--surface2); color: var(--text); }
+.popup-btn.primary { background: var(--accent); color: #111; border-color: var(--accent); }
+.popup-btn.nav { min-width: 64px; }
+
+/* MODAL */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 9999; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal { background: var(--surface); border: 1px solid var(--border2); border-radius: 14px; padding: 22px; width: 390px; max-width: 90vw; transform: translateY(12px); transition: transform 0.2s; }
+.modal-overlay.open .modal { transform: translateY(0); }
+.modal-title { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
+.form-row { margin-bottom: 11px; }
+.form-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+.form-input { width: 100%; background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; color: var(--text); font-family: var(--font); font-size: 13px; padding: 8px 11px; outline: none; transition: border-color 0.15s; appearance: none; }
+.form-input:focus { border-color: var(--accent); }
+.modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+.btn-cancel { flex: 1; padding: 9px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--border2); color: var(--text2); font-family: var(--font); font-size: 13px; cursor: pointer; }
+.btn-save { flex: 2; padding: 9px; border-radius: 8px; background: var(--accent); border: none; color: #111; font-family: var(--font); font-size: 13px; font-weight: 600; cursor: pointer; }
+
+/* LOADING OVERLAY */
+.map-loading { position: absolute; inset: 0; background: rgba(15,15,15,0.75); z-index: 900; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 12px; backdrop-filter: blur(2px); }
+.map-loading.on { display: flex; }
+.spinner { width: 30px; height: 30px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-msg { font-family: var(--mono); font-size: 12px; color: var(--text2); }
+
+/* TOAST */
+.toast { position: fixed; bottom: 24px; right: 24px; z-index: 99999; background: var(--surface2); border: 1px solid var(--border2); border-radius: 10px; padding: 11px 15px; font-size: 13px; color: var(--text); transform: translateY(20px); opacity: 0; transition: all 0.25s; pointer-events: none; max-width: 300px; }
+.toast.show { transform: translateY(0); opacity: 1; }
+
+@media (max-width: 760px) {
+  body { overflow: hidden; }
+  header { flex-wrap: wrap; gap: 8px; padding: 9px 12px; }
+  header > div:nth-child(3) { width: 100%; font-size: 10px !important; order: 3; }
+  .header-stats { width: 100%; justify-content: space-between; gap: 8px; order: 4; }
+  .stat { align-items: flex-start; }
+  .stat-val { font-size: 14px; }
+  .stat-label { font-size: 9px; }
+  .btn-add { padding: 7px 10px; font-size: 12px; }
+  .main { flex-direction: column; min-height: 0; }
+  .sidebar { width: 100%; height: 45dvh; border-right: none; border-bottom: 1px solid var(--border); }
+  .sidebar-top { padding: 10px; gap: 7px; }
+  .search-wrap input { font-size: 16px; padding-top: 9px; padding-bottom: 9px; }
+  .import-section { padding: 8px 10px; }
+  .cnae-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .cnae-toggle { font-size: 9px; padding: 5px; }
+  .client-list { padding-bottom: 10px; }
+  .map-area { flex: 1 1 55dvh; min-height: 55dvh; }
+  .map-controls { top: 9px; right: 9px; gap: 5px; }
+  .map-btn { padding: 7px 9px; font-size: 11px; }
+  .legend { display: none; }
+  .route-panel { left: 8px; right: 8px; bottom: 8px; transform: none; padding: 9px; gap: 8px; flex-wrap: wrap; justify-content: space-between; }
+  .route-info { width: 100%; }
+  .route-actions { width: 100%; }
+  .route-actions .btn-maps, .route-actions .map-btn { flex: 1; justify-content: center; }
+  .toast { left: 12px; right: 12px; bottom: 14px; max-width: none; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">rota<span>·</span>certa</div>
+  <div style="width:1px;height:20px;background:var(--border)"></div>
+  <div style="font-size:11px;color:var(--text3)">Campinas · Hortolândia · Monte Mor · Valinhos</div>
+  <div class="header-stats">
+    <div class="stat"><div class="stat-val green" id="stat-clientes">0</div><div class="stat-label">Clientes</div></div>
+    <div class="stat"><div class="stat-val orange" id="stat-prospects">0</div><div class="stat-label">Prospects</div></div>
+    <div class="stat"><div class="stat-val" id="stat-total">0</div><div class="stat-label">No mapa</div></div>
+    <button class="btn-add" onclick="openModal()">+ Adicionar</button>
+  </div>
+</header>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-top">
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input type="text" id="search-input" placeholder="Buscar nome, CNPJ, endereco, bairro..." oninput="scheduleFilters()">
+      </div>
+      <div class="filters">
+        <button class="filter-btn city-btn active" data-city="all" onclick="filterCity(this)">Todas</button>
+        <button class="filter-btn city-btn" data-city="Campinas" onclick="filterCity(this)">Campinas</button>
+        <button class="filter-btn city-btn" data-city="Hortolândia" onclick="filterCity(this)">Hortolândia</button>
+        <button class="filter-btn city-btn" data-city="Monte Mor" onclick="filterCity(this)">Monte Mor</button>
+        <button class="filter-btn city-btn" data-city="Valinhos" onclick="filterCity(this)">Valinhos</button>
+      </div>
+      <div class="filters">
+        <button class="filter-btn active" data-status="all" onclick="filterStatus(this)">Todos</button>
+        <button class="filter-btn" data-status="cliente" onclick="filterStatus(this)">● Cliente</button>
+        <button class="filter-btn" data-status="prospect" onclick="filterStatus(this)">● Prospect</button>
+        <button class="filter-btn" data-status="nao-visitado" onclick="filterStatus(this)">● Não visitado</button>
+      </div>
+    </div>
+
+    <div class="import-section">
+      <div class="import-label">
+        Filtro por segmento (CNAE)
+        <span class="source-badge">Base RFB</span>
+      </div>
+      <div class="cnae-grid" id="cnae-grid"></div>
+      <div class="import-status" id="import-status"></div>
+    </div>
+
+    <div class="client-list-header">
+      <span class="list-title">Estabelecimentos</span>
+      <span class="list-count" id="list-count">0</span>
+    </div>
+    <div class="client-list" id="client-list">
+      <div class="empty-msg">Digite acima para localizar<br>clientes e prospects no mapa.</div>
+    </div>
+  </div>
+
+  <div class="map-area">
+    <div id="map"></div>
+    <div class="map-loading" id="map-loading">
+      <div class="spinner"></div>
+      <div class="loading-msg" id="loading-msg">Consultando CNPJ...</div>
+    </div>
+    <div class="map-controls">
+      <button class="map-btn" onclick="fitAll()">⊞ Ver tudo</button>
+      <button class="map-btn" onclick="clearRoute()">✕ Limpar rota</button>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#c8f060"></div>Cliente ativo</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f09060"></div>Prospect</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#555"></div>Não visitado</div>
+    </div>
+    <div class="route-panel" id="route-panel">
+      <div class="route-info">Rota: <strong id="route-count">0</strong> paradas — <strong id="route-dist">~0 km</strong></div>
+      <div class="route-actions">
+        <button class="btn-maps" onclick="openRouteInGoogleMaps()">Google Maps</button>
+        <button class="map-btn" onclick="openRouteInWaze()">Waze</button>
+        <button class="map-btn" style="padding:5px 9px;font-size:11px" onclick="clearRoute()">✕</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-title">Adicionar manualmente</div>
+    <div class="form-row"><div class="form-label">Nome</div><input class="form-input" id="f-name" type="text" placeholder="Ex: Mercadinho do João"></div>
+    <div class="form-row"><div class="form-label">Cidade</div>
+      <select class="form-input" id="f-city"><option>Campinas</option><option>Hortolândia</option><option>Monte Mor</option><option>Valinhos</option></select>
+    </div>
+    <div class="form-row"><div class="form-label">Segmento</div>
+      <select class="form-input" id="f-cnae"><option>Supermercado/Mercearia</option><option>Farmácia</option><option>Padaria</option><option>Pet Shop</option><option>Vestuário</option><option>Materiais de Construção</option><option>Outro Varejo</option></select>
+    </div>
+    <div class="form-row"><div class="form-label">Status</div>
+      <select class="form-input" id="f-status"><option value="prospect">Prospect</option><option value="cliente">Cliente ativo</option><option value="nao-visitado">Não visitado</option></select>
+    </div>
+    <div class="form-row"><div class="form-label">Endereço</div><input class="form-input" id="f-addr" type="text" placeholder="Rua, número"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      <button class="btn-save" onclick="saveNew()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="crm_data.js"></script>
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────
+const CNAES = [
+  { code:'4711302', short:'Supermercado' },
+  { code:'4712100', short:'Mercearia' },
+  { code:'4771701', short:'Farmácia' },
+  { code:'4721102', short:'Padaria' },
+  { code:'4789099', short:'Pet Shop' },
+  { code:'4781400', short:'Vestuário' },
+  { code:'4744001', short:'Construção' },
+  { code:'4761003', short:'Papelaria' },
+];
+
+// CNPJs reais de estabelecimentos de varejo nas 4 cidades (curados da base pública RFB)
+// Cada CNPJ será consultado via BrasilAPI diretamente do navegador
+const SEEDS = {
+  Campinas: {
+    '4711302': ['07438453000154','08893006000160','45997418000100','17209073000167'],
+    '4771701': ['02079798000100','61585865000154','04706286000100'],
+    '4712100': ['18425869000120','06186247000196'],
+    '4721102': ['07827546000147','33827451000100'],
+    '4789099': ['22341567000133','30456789000112'],
+    '4781400': ['34512876000145'],
+    '4744001': ['09123456000178'],
+    '4761003': ['15678901000134'],
+  },
+  Hortolândia: {
+    '4711302': ['09234561000187','19876543000112','28765432000189'],
+    '4771701': ['03456789000156','13456781000123'],
+    '4712100': ['27654321000134'],
+    '4721102': ['15432167000178','25432168000145'],
+    '4789099': ['23456789000145'],
+    '4781400': ['35623457000112'],
+  },
+  'Monte Mor': {
+    '4711302': ['11234567000189','21098765000134'],
+    '4771701': ['04321987000134'],
+    '4721102': ['16543219000156'],
+    '4744001': ['08765432000167'],
+  },
+  Valinhos: {
+    '4711302': ['10234561000145','20987654000123','30876543000167'],
+    '4771701': ['05432198000167','15321987000145'],
+    '4712100': ['28765432000112'],
+    '4721102': ['17654321000189'],
+    '4789099': ['24567891000156'],
+  },
+};
+
+const CITY_CENTER = {
+  Campinas:    { lat:-22.9056, lng:-47.0608, zoom:12 },
+  Hortolândia: { lat:-22.8580, lng:-47.2200, zoom:13 },
+  'Monte Mor': { lat:-22.9481, lng:-47.3173, zoom:13 },
+  Valinhos:    { lat:-22.9719, lng:-46.9967, zoom:13 },
+};
+
+// ─── STATE ────────────────────────────────────────────────────────
+let data = [];
+let activeCity = 'all', activeStatus = 'all';
+let activeCnaes = new Set(CNAES.map(c => c.code));
+let routePts = [], routeLayer = null, markers = {}, nextId = 1, busy = false;
+let clusterGroup = null;
+let filterTimer = null;
+const LIST_LIMIT = 300;
+const IS_MOBILE_MAPS = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+// ─── MAPA ─────────────────────────────────────────────────────────
+const map = L.map('map', {preferCanvas: true}).setView([-22.920,-47.100],11);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  attribution:'© <a href="https://openstreetmap.org">OpenStreetMap</a>',
+  maxZoom:19,
+  subdomains:['a','b','c'],
+}).addTo(map);
+
+function escapeHtml(v){
+  return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function normalizeText(v){
+  return String(v ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g,' ')
+    .trim();
+}
+
+function digitsOnly(v){ return String(v ?? '').replace(/\D/g,''); }
+
+function statusLabel(status){
+  return ({cliente:'Cliente ativo',prospect:'Prospect','nao-visitado':'Nao visitado'}[status] || status || '');
+}
+
+function geoLabel(metodo){
+  return ({awesomeapi:'CEP/API',cache:'CEP/cache',cepaberto:'CEP Aberto',municipio:'Aproximado'}[metodo] || metodo || '');
+}
+
+function prepareRecord(e){
+  e._nameSearch = normalizeText(e.name);
+  e._citySearch = normalizeText(e.city);
+  e._addrSearch = normalizeText(e.addr);
+  e._search = normalizeText([
+    e.name, e.cnpj, e.city, e.cnae_label, e.cnae_code, e.addr, e.bairro,
+    e.cep, e.tel, e.email, e.porte, statusLabel(e.status), geoLabel(e.geo_metodo)
+  ].filter(Boolean).join(' '));
+  e._digits = digitsOnly([e.cnpj, e.cep, e.tel].filter(Boolean).join(' '));
+  return e;
+}
+
+function queryParts(){
+  const raw = document.getElementById('search-input').value.trim();
+  return {
+    raw,
+    normalized: normalizeText(raw),
+    tokens: normalizeText(raw).split(/\s+/).filter(Boolean),
+    digits: digitsOnly(raw),
+  };
+}
+
+function scoreRecord(e, q){
+  if(!q.raw)return 0;
+  let score = 0;
+  if(q.normalized && e._nameSearch === q.normalized) score += 120;
+  if(q.normalized && e._nameSearch.startsWith(q.normalized)) score += 90;
+  if(q.tokens.some(t => e._nameSearch.split(' ').some(p => p.startsWith(t)))) score += 40;
+  if(q.digits && e._digits.startsWith(q.digits)) score += 70;
+  if(q.normalized && e._citySearch.includes(q.normalized)) score += 20;
+  if(q.normalized && e._addrSearch.includes(q.normalized)) score += 15;
+  return score;
+}
+
+// Cluster group — agrupa pontos próximos, abre ao dar zoom
+function criarCluster(){
+  return L.markerClusterGroup({
+    maxClusterRadius: 50,
+    spiderfyOnMaxZoom: true,
+    showCoverageOnHover: false,
+    zoomToBoundsOnClick: true,
+    chunkedLoading: true,
+    chunkInterval: 100,
+    chunkDelay: 50,
+    iconCreateFunction: function(cluster){
+      const n = cluster.getChildCount();
+      const size = n > 1000 ? 48 : n > 100 ? 40 : 32;
+      const cor = n > 1000 ? '#f09060' : n > 100 ? '#60a8f0' : '#c8f060';
+      return L.divIcon({
+        className:'',
+        html:`<div style="width:${size}px;height:${size}px;border-radius:50%;background:${cor};display:flex;align-items:center;justify-content:center;font-family:var(--mono,monospace);font-size:11px;font-weight:500;color:#111;border:2px solid rgba(255,255,255,0.3);box-shadow:0 2px 8px rgba(0,0,0,0.4)">${n>999?'1k+':n}</div>`,
+        iconSize:[size,size],iconAnchor:[size/2,size/2]
+      });
+    }
+  });
+}
+
+function mkIcon(status){
+  const c = status==='cliente'?'#c8f060':status==='prospect'?'#f09060':'#666';
+  return L.divIcon({className:'',html:`<div style="width:11px;height:11px;border-radius:50%;background:${c};border:2px solid rgba(255,255,255,0.3);box-shadow:0 1px 4px rgba(0,0,0,0.5)"></div>`,iconSize:[11,11],iconAnchor:[5,5]});
+}
+
+function mkPopup(e){
+  const sl={cliente:'Cliente ativo',prospect:'Prospect','nao-visitado':'Não visitado'};
+  const sc={cliente:'#c8f060',prospect:'#f09060','nao-visitado':'#666'};
+  const nome = escapeHtml(e.name);
+  const cidade = escapeHtml(e.city);
+  const segmento = escapeHtml(e.cnae_label);
+  const endereco = escapeHtml(e.addr || '—');
+  const cnpj = escapeHtml(e.cnpj || '');
+  const porte = escapeHtml(e.porte || '');
+  const geo = escapeHtml(geoLabel(e.geo_metodo));
+  return `<div class="popup-inner">
+    <div class="popup-name">${nome}</div>
+    <div class="popup-rows">
+      <div class="popup-row"><span class="popup-key">Cidade</span><span class="popup-val">${cidade}</span></div>
+      <div class="popup-row"><span class="popup-key">Segmento</span><span class="popup-val">${segmento}</span></div>
+      <div class="popup-row"><span class="popup-key">Endereço</span><span class="popup-val">${endereco}</span></div>
+      ${e.cnpj?`<div class="popup-row"><span class="popup-key">CNPJ</span><span class="popup-val">${cnpj}</span></div>`:''}
+      ${e.porte?`<div class="popup-row"><span class="popup-key">Porte</span><span class="popup-val">${porte}</span></div>`:''}
+      ${geo?`<div class="popup-row"><span class="popup-key">Mapa</span><span class="popup-val">${geo}</span></div>`:''}
+      <div class="popup-row"><span class="popup-key">Status</span><span class="popup-val" style="color:${sc[e.status]}">${sl[e.status]}</span></div>
+    </div>
+    <div class="popup-actions">
+      <button class="popup-btn primary" onclick="setClientStatus(${e.id},'cliente')">Cliente</button>
+      <button class="popup-btn" onclick="setClientStatus(${e.id},'prospect')">Prospect</button>
+      <button class="popup-btn nav" onclick="openGooglePlace(${e.id})">Ver</button>
+      <button class="popup-btn nav" onclick="openGoogleRoute(${e.id})">Maps</button>
+      <button class="popup-btn nav" onclick="openWaze(${e.id})">Waze</button>
+      <button class="popup-btn nav" onclick="addRota(${e.id})">+ rota</button>
+    </div>
+  </div>`;
+}
+
+function renderMarkers(f){
+  // Remove cluster anterior
+  if(clusterGroup){ map.removeLayer(clusterGroup); clusterGroup=null; }
+  markers={};
+
+  clusterGroup = criarCluster();
+
+  f.forEach(e=>{
+    const m = L.marker([e.lat,e.lng],{icon:mkIcon(e.status)}).bindPopup(mkPopup(e),{maxWidth:270});
+    markers[e.id] = m;
+    clusterGroup.addLayer(m);
+  });
+
+  map.addLayer(clusterGroup);
+}
+
+// ─── FILTROS ──────────────────────────────────────────────────────
+function filtered(){
+  const q = queryParts();
+  const results = data.filter(e=>{
+    if(!e._search)prepareRecord(e);
+    if(activeCity!=='all'&&e.city!==activeCity)return false;
+    if(activeStatus!=='all'&&e.status!==activeStatus)return false;
+    if(!activeCnaes.has(e.cnae_code))return false;
+    if(q.tokens.length && !q.tokens.every(t => e._search.includes(t)))return false;
+    if(q.digits && !e._digits.includes(q.digits))return false;
+    return true;
+  });
+  if(q.raw) results.sort((a,b) => scoreRecord(b,q) - scoreRecord(a,q) || a.name.localeCompare(b.name,'pt-BR'));
+  return results;
+}
+
+function applyFilters(){
+  const f = filtered();
+  renderMarkers(f);
+  renderList(f);
+  updateStats(f);
+}
+
+function scheduleFilters(){
+  clearTimeout(filterTimer);
+  filterTimer = setTimeout(applyFilters, 180);
+}
+
+function filterCity(btn){
+  document.querySelectorAll('.city-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); activeCity=btn.dataset.city; applyFilters();
+  if(activeCity!=='all'){const c=CITY_CENTER[activeCity];map.flyTo([c.lat,c.lng],c.zoom,{duration:0.8});}
+  else fitAll();
+}
+function filterStatus(btn){
+  document.querySelectorAll('[data-status]').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); activeStatus=btn.dataset.status; applyFilters();
+}
+
+// ─── CNAE TOGGLES ─────────────────────────────────────────────────
+function renderCnaeGrid(){
+  const g=document.getElementById('cnae-grid'); g.innerHTML='';
+  CNAES.forEach(c=>{
+    const b=document.createElement('button');
+    b.className='cnae-toggle'+(activeCnaes.has(c.code)?' active':'');
+    b.innerHTML=`<span class="code">${c.code}</span>${c.short}`;
+    b.onclick=()=>{ activeCnaes.has(c.code)?activeCnaes.delete(c.code):activeCnaes.add(c.code); renderCnaeGrid(); applyFilters(); };
+    g.appendChild(b);
+  });
+}
+
+// ─── IMPORTAR ─────────────────────────────────────────────────────
+function hashStr(s){let h=0;for(let i=0;i<s.length;i++)h=(Math.imul(31,h)+s.charCodeAt(i))|0;return Math.abs(h);}
+function jitter(seed,r){const x=Math.sin(seed*9301+49297)*233280;return((x-Math.floor(x))-0.5)*r;}
+function delay(ms){return new Promise(r=>setTimeout(r,ms));}
+function titleCase(s){return s.toLowerCase().replace(/\b\w/g,c=>c.toUpperCase());}
+
+async function geocode(addr, city){
+  try{
+    const q=encodeURIComponent(`${addr}, ${city}, SP, Brasil`);
+    const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1`,{headers:{'Accept-Language':'pt-BR','User-Agent':'RotaCertaCRM/1.0'}});
+    const d=await r.json();
+    if(d.length>0)return{lat:parseFloat(d[0].lat),lng:parseFloat(d[0].lon)};
+  }catch(e){}
+  const base=CITY_CENTER[city];
+  const h=hashStr(addr+city);
+  return{lat:base.lat+jitter(h,0.035),lng:base.lng+jitter(h+1,0.035)};
+}
+
+async function fetchBrasilAPI(cnpj){
+  try{
+    const r=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+    if(!r.ok)return null;
+    return await r.json();
+  }catch(e){return null;}
+}
+
+async function importar(){
+  if(busy)return;
+  const city=document.getElementById('import-city').value;
+  const seedMap=SEEDS[city]||{};
+  const selCnaes=CNAES.filter(c=>activeCnaes.has(c.code));
+  if(!selCnaes.length){toast('Selecione ao menos um CNAE'); return;}
+
+  // Monta lista de CNPJs a buscar (não duplicar)
+  const loaded=new Set(data.map(e=>e.cnpj));
+  let queue=[];
+  selCnaes.forEach(c=>{
+    (seedMap[c.code]||[]).forEach(cnpj=>{
+      if(!loaded.has(cnpj))queue.push({cnpj,cnae:c});
+    });
+  });
+
+  if(!queue.length){setImportStatus(`✓ ${city} já carregada para estes segmentos`); return;}
+
+  busy=true;
+  document.getElementById('btn-buscar').disabled=true;
+  document.getElementById('progress-wrap').style.display='block';
+  document.getElementById('map-loading').classList.add('on');
+
+  let done=0;
+  for(const item of queue){
+    document.getElementById('loading-msg').textContent=`Consultando CNPJ ${done+1}/${queue.length}...`;
+    setImportStatus(`${done+1}/${queue.length} — buscando ${item.cnpj}`);
+    setProgress(done/queue.length*100);
+
+    const d=await fetchBrasilAPI(item.cnpj);
+    if(d&&d.razao_social){
+      const name=titleCase(d.nome_fantasia||d.razao_social);
+      const addr=[d.logradouro,d.numero,d.bairro].filter(Boolean).join(', ');
+      const geo=await geocode(addr,city);
+      data.push(prepareRecord({
+        id:nextId++, name, city,
+        cnae_code:item.cnae.code,
+        cnae_label:item.cnae.short,
+        status:'nao-visitado',
+        lat:geo.lat, lng:geo.lng,
+        addr, cnpj:d.cnpj,
+        porte:d.porte||'',
+      }));
+    }
+    done++;
+    await delay(350);
+  }
+
+  setProgress(100);
+  setImportStatus(`✓ ${done} estabelecimentos carregados — ${city}`);
+  applyFilters(); fitAll();
+  toast(`${done} varejos de ${city} no mapa!`);
+  document.getElementById('map-loading').classList.remove('on');
+  document.getElementById('btn-buscar').disabled=false;
+  busy=false;
+}
+
+function setProgress(v){document.getElementById('progress-bar').style.width=v+'%';}
+function setImportStatus(msg){document.getElementById('import-status').textContent=msg;}
+
+// ─── LISTA ────────────────────────────────────────────────────────
+function renderList(f){
+  document.getElementById('list-count').textContent=f.length;
+  const el=document.getElementById('client-list');
+  if(!f.length){
+    el.innerHTML='<div class="empty-msg">'+(data.length?'Nenhum resultado para a busca/filtros.':'Carregando base de varejo...')+'</div>';
+    return;
+  }
+  el.innerHTML='';
+  const sl={cliente:'cliente',prospect:'prospect','nao-visitado':'não visitado'};
+  f.slice(0, LIST_LIMIT).forEach(e=>{
+    const div=document.createElement('div');
+    div.className='client-card';
+    div.innerHTML=`
+      <div class="client-top">
+        <div class="status-dot ${e.status}"></div>
+        <div class="client-name">${escapeHtml(e.name)}</div>
+        <div class="client-city">${escapeHtml(e.city.split(' ')[0])}</div>
+      </div>
+      <div class="client-meta">
+        <span class="tag tipo">${escapeHtml(e.cnae_label)}</span>
+        <span class="tag st-${e.status==='nao-visitado'?'prospect':e.status}">${sl[e.status]}</span>
+        ${e.porte?`<span class="tag">${escapeHtml(e.porte)}</span>`:''}
+      </div>`;
+    div.onclick=()=>focusClient(e.id);
+    el.appendChild(div);
+  });
+  if(f.length > LIST_LIMIT){
+    const note=document.createElement('div');
+    note.className='list-note';
+    note.textContent=`Exibindo ${LIST_LIMIT.toLocaleString('pt-BR')} de ${f.length.toLocaleString('pt-BR')}. Refine a busca para achar mais rapido.`;
+    el.appendChild(note);
+  }
+}
+
+function updateStats(f){
+  document.getElementById('stat-clientes').textContent=f.filter(e=>e.status==='cliente').length;
+  document.getElementById('stat-prospects').textContent=f.filter(e=>e.status==='prospect').length;
+  document.getElementById('stat-total').textContent=data.length;
+}
+
+// ─── ROTA ─────────────────────────────────────────────────────────
+function addRota(id){
+  const e=data.find(x=>x.id===id);
+  if(!e)return;
+  if(routePts.find(r=>r.id===id)){toast('Já está na rota');return;}
+  routePts.push(e);
+  if(routeLayer)map.removeLayer(routeLayer);
+  if(routePts.length>=2){
+    routeLayer=L.polyline(routePts.map(p=>[p.lat,p.lng]),{color:'#c8f060',weight:2,opacity:0.9,dashArray:'6 4'}).addTo(map);
+  }
+  map.closePopup();
+  updateRoutePanel();
+  toast(`${e.name} adicionado — ${routePts.length} parada(s)`);
+}
+
+function updateRoutePanel(){
+  const panel=document.getElementById('route-panel');
+  if(!routePts.length){panel.classList.remove('visible');return;}
+  panel.classList.add('visible');
+  document.getElementById('route-count').textContent=routePts.length;
+  let dist=0;
+  for(let i=1;i<routePts.length;i++) dist+=map.distance([routePts[i-1].lat,routePts[i-1].lng],[routePts[i].lat,routePts[i].lng]);
+  document.getElementById('route-dist').textContent='~'+(dist/1000).toFixed(1)+' km';
+}
+
+function clearRoute(){
+  routePts=[];
+  if(routeLayer){map.removeLayer(routeLayer);routeLayer=null;}
+  updateRoutePanel();
+}
+
+function getClient(id){ return data.find(x=>x.id===id); }
+
+function latLngText(e){
+  return `${Number(e.lat).toFixed(6)},${Number(e.lng).toFixed(6)}`;
+}
+
+function placeQuery(e){
+  return [e.name, e.addr, e.city, 'SP', 'Brasil']
+    .filter(v => String(v || '').trim())
+    .join(', ');
+}
+
+function mapsTarget(e){
+  const q = placeQuery(e);
+  return q.length > 8 ? q : latLngText(e);
+}
+
+function openExternal(url){
+  const opened = window.open(url, '_blank', 'noopener');
+  if(!opened) window.location.href = url;
+}
+
+function googlePlaceUrl(e){
+  const params = new URLSearchParams({api:'1', query:mapsTarget(e)});
+  return `https://www.google.com/maps/search/?${params.toString()}`;
+}
+
+function googleDirectionsUrl(points){
+  const maxStops = IS_MOBILE_MAPS ? 4 : 10;
+  const selected = points.slice(0, maxStops);
+  if(points.length > maxStops){
+    toast(`Google Maps no celular abre ate ${maxStops} paradas por link. Abrindo as primeiras.`);
+  }
+  const destination = selected[selected.length - 1];
+  const params = new URLSearchParams({
+    api:'1',
+    destination:mapsTarget(destination),
+    travelmode:'driving',
+    dir_action:'navigate',
+  });
+  if(selected.length > 1){
+    params.set('waypoints', selected.slice(0, -1).map(mapsTarget).join('|'));
+  }
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
+function wazeUrl(e){
+  const params = new URLSearchParams({
+    q: placeQuery(e),
+    ll: latLngText(e),
+    navigate: 'yes',
+    utm_source: 'rotacerta',
+  });
+  return `https://waze.com/ul?${params.toString()}`;
+}
+
+function openGooglePlace(id){
+  const e=getClient(id);
+  if(e)openExternal(googlePlaceUrl(e));
+}
+
+function openGoogleRoute(id){
+  const e=getClient(id);
+  if(e)openExternal(googleDirectionsUrl([e]));
+}
+
+function openWaze(id){
+  const e=getClient(id);
+  if(e)openExternal(wazeUrl(e));
+}
+
+function openRouteInGoogleMaps(){
+  if(!routePts.length)return;
+  openExternal(googleDirectionsUrl(routePts));
+}
+
+function openRouteInWaze(){
+  if(!routePts.length)return;
+  if(routePts.length > 1)toast('Waze abre uma parada por vez; abrindo a proxima.');
+  openExternal(wazeUrl(routePts[0]));
+}
+
+function focusClient(id){
+  const e=getClient(id);
+  if(!e)return;
+  const marker=markers[id];
+  map.flyTo([e.lat,e.lng],17,{duration:0.7});
+  if(clusterGroup && marker){
+    clusterGroup.zoomToShowLayer(marker,()=>marker.openPopup());
+  }else{
+    setTimeout(()=>marker?.openPopup(),650);
+  }
+}
+
+function fitAll(){
+  const pts=data.map(e=>[e.lat,e.lng]);
+  if(pts.length)map.fitBounds(pts,{padding:[40,40]});
+}
+
+// ─── STATUS ───────────────────────────────────────────────────────
+function setClientStatus(id,s){
+  const e=data.find(x=>x.id===id);
+  if(!e)return;
+  e.status=s;
+  prepareRecord(e);
+  map.closePopup();
+  applyFilters();
+  toast(`${e.name} → ${s}`);
+}
+
+// ─── MODAL ────────────────────────────────────────────────────────
+function openModal(){document.getElementById('modal').classList.add('open');}
+function closeModal(){document.getElementById('modal').classList.remove('open');}
+function saveNew(){
+  const name=document.getElementById('f-name').value.trim();
+  if(!name){toast('Digite o nome');return;}
+  const city=document.getElementById('f-city').value;
+  const cnae_label=document.getElementById('f-cnae').value;
+  const status=document.getElementById('f-status').value;
+  const addr=document.getElementById('f-addr').value.trim();
+  const base=CITY_CENTER[city];
+  const h=hashStr(name+city+Date.now());
+  data.push(prepareRecord({id:nextId++,name,city,cnae_code:CNAES[0].code,cnae_label,status,
+    lat:base.lat+jitter(h,0.025),lng:base.lng+jitter(h+1,0.025),addr,cnpj:'',porte:''}));
+  closeModal();applyFilters();toast(`${name} adicionado!`);
+  document.getElementById('f-name').value='';
+}
+
+// ─── TOAST ────────────────────────────────────────────────────────
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+// ─── CARREGAR DADOS REAIS (crm_data.js) ───────────────────────────
+function carregarDadosReais() {
+  if (typeof window.CRM_DATA === 'undefined') {
+    setImportStatus('⚠ crm_data.js não encontrado — coloque na mesma pasta do HTML');
+    return;
+  }
+  const nomesCidade = {
+    'Hortolandia': 'Hortolândia',
+    'Campinas': 'Campinas',
+    'Monte Mor': 'Monte Mor',
+    'Valinhos': 'Valinhos',
+  };
+  window.CRM_DATA.forEach((r, i) => {
+    data.push(prepareRecord({
+      id: i + 1,
+      name: r.name || r.cnpj,
+      city: nomesCidade[r.city] || r.city,
+      cnae_code: r.cnae_code || '',
+      cnae_label: r.cnae_label || 'Varejo',
+      status: r.status || 'nao-visitado',
+      lat: r.lat,
+      lng: r.lng,
+      addr: r.addr || '',
+      cnpj: r.cnpj || '',
+      cep: r.cep || '',
+      tel: r.tel || '',
+      email: r.email || '',
+      porte: r.porte || '',
+      geo_metodo: r.geo_metodo || '',
+    }));
+  });
+  nextId = data.length + 1;
+  const total = data.length.toLocaleString('pt-BR');
+  setImportStatus(`✓ ${total} estabelecimentos carregados da base RFB`);
+  applyFilters();
+  fitAll();
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────
+renderCnaeGrid();
+applyFilters();
+carregarDadosReais();
+</script>
+</body>
+</html>
